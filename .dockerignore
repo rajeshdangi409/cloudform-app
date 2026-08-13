@@ -1,0 +1,12 @@
+venv/
+
+.env
+
+.git/
+
+.gitignore
+
+__pycache__/
+*.pyc
+
+flask-eks-rds-terraform/
