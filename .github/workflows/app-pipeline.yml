@@ -8,9 +8,10 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   ECR_REPOSITORY: flask-eks-rds
+  AWS_ACCOUNT_ID: 575589967956
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +26,6 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set Image Tag
@@ -38,9 +38,34 @@ jobs:
       - name: Tag Docker Image
         run: |
           docker tag $ECR_REPOSITORY:$IMAGE_TAG \
-          575589967956.dkr.ecr.ap-south-1.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Push Docker Image
         run: |
           docker push \
-          575589967956.dkr.ecr.ap-south-1.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Clone GitOps Repo
+        run: |
+          git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ vars.GITOPS_REPO }}.git
+
+      - name: Update Deployment Image
+        run: |
+          cd cloudform-gitops
+
+          sed -i "s|image: .*|image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG|g" apps/cloudform/deployment.yaml
+
+      - name: Commit Changes
+        run: |
+          cd cloudform-gitops
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add .
+          git commit -m "Update image to $IMAGE_TAG" || echo "No changes"
+
+      - name: Push Changes
+        run: |
+          cd cloudform-gitops
+          git push origin main
